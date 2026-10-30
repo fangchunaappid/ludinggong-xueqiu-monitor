@@ -1,2 +1,1 @@
 curl_cffi>=0.7.0
-pycryptodome>=3.20.0

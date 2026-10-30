@@ -15,8 +15,6 @@
   XQ_COOKIE       必填，雪球登录 Cookie（社交时间线接口必须登录态；GitHub Secrets 配置）
   FEISHU_WEBHOOK  必填，飞书自定义机器人 Webhook
 """
-import base64
-import hashlib
 import html as htmllib
 import json
 import os
@@ -27,8 +25,6 @@ import urllib.request
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, "data", "posts.json")
-ENC = os.path.join(BASE, "data", "posts.enc.json")
-KEY = os.environ.get("DATA_KEY", "").strip()
 UID = os.environ.get("XUEQIU_UID", "8790885129")
 COOKIE = os.environ.get("XQ_COOKIE", "").strip()
 FEISHU = os.environ.get("FEISHU_WEBHOOK", "").strip()
@@ -40,7 +36,6 @@ PAGE_DELAY = 1.5
 # 雪球挂了阿里云 WAF：普通 urllib 的 TLS 指纹会被直接拦截，
 # 必须用 curl_cffi 模拟真实 Chrome TLS 指纹（requirements.txt 提供）。
 from curl_cffi import requests as _creq  # noqa: E402
-from Crypto.Cipher import AES  # noqa: E402
 
 
 class ApiError(RuntimeError):
@@ -123,12 +118,9 @@ def main():
     else:
         print("未配置 XQ_COOKIE，匿名抓取（第 1 页，日常增量足够）")
 
-    if not os.path.exists(DATA) and os.path.exists(ENC):
-        if not KEY:
-            print("缺 DATA_KEY，无法解密底库")
-            feishu("⚠️ 超级鹿鼎公雪球监控失败：缺 DATA_KEY，无法解密底库")
-            sys.exit(1)
-        decrypt_data_file()
+    if not os.path.exists(DATA):
+        print("底库不存在：%s" % DATA)
+        sys.exit(1)
     with open(DATA, encoding="utf-8") as f:
         db = json.load(f)
     posts = db["posts"]
@@ -190,8 +182,6 @@ def main():
     db["meta"]["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
     with open(DATA, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, indent=1)
-    if KEY:
-        encrypt_data_file()
 
     dates = sorted({p["date"] for p in new_posts})
     span = dates[0] if len(dates) == 1 else "%s ~ %s" % (dates[0], dates[-1])
@@ -201,45 +191,6 @@ def main():
            % (len(new_posts), span))
 
 
-# ---------------------------------------------------------------- 加密层
-# 仓库只存密文 posts.enc.json（AES-GCM-256 + PBKDF2-SHA256），口令在 DATA_KEY；
-# 明文 posts.json 仅存在于运行内存/本地，绝不入库。浏览器端用 WebCrypto 解密。
-def _derive_key(password: str, salt: bytes) -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 250000, dklen=32)
-
-
-def encrypt_data_file():
-    with open(DATA, "r", encoding="utf-8") as f:
-        obj = json.load(f)
-    salt, iv = os.urandom(16), os.urandom(12)
-    ct, tag = AES.new(_derive_key(KEY, salt), AES.MODE_GCM, nonce=iv).encrypt_and_digest(
-        json.dumps(obj, ensure_ascii=False).encode("utf-8"))
-    blob = {"v": 1, "kdf": "PBKDF2-SHA256", "iters": 250000,
-            "salt": base64.b64encode(salt).decode(),
-            "iv": base64.b64encode(iv).decode(),
-            "ct": base64.b64encode(ct).decode(),
-            "tag": base64.b64encode(tag).decode()}
-    tmp = ENC + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(blob, f, ensure_ascii=False)
-    os.replace(tmp, ENC)
-
-
-def decrypt_data_file():
-    with open(ENC, "r", encoding="utf-8") as f:
-        d = json.load(f)
-    key = _derive_key(KEY, base64.b64decode(d["salt"]))
-    pt = AES.new(key, AES.MODE_GCM, nonce=base64.b64decode(d["iv"]), mac_len=16)\
-        .decrypt_and_verify(base64.b64decode(d["ct"]), base64.b64decode(d["tag"]))
-    with open(DATA, "w", encoding="utf-8") as f:
-        f.write(pt.decode("utf-8"))
-
-
 if __name__ == "__main__":
-    if "--decrypt-only" in sys.argv:
-        decrypt_data_file(); print("已解密", DATA)
-    elif "--encrypt-only" in sys.argv:
-        encrypt_data_file(); print("已加密", ENC)
-    else:
-        main()
+    main()
 
