@@ -82,6 +82,21 @@ def fetch_page(page):
     raise RuntimeError("接口失败: " + " | ".join(errs))
 
 
+def fetch_full_text(sid):
+    """长文/专栏帖全文：时间线只有导读，api 域名 show.json 返回完整正文。失败返回空串。"""
+    url = "https://api.xueqiu.com/statuses/show.json?id=%s" % sid
+    for attempt in range(2):
+        try:
+            j = http_json(url)
+            return clean_text(j.get("text") or "")
+        except Exception as e:  # noqa: BLE001
+            if attempt:
+                print("  长文 %s 全文获取失败：%s" % (sid, str(e)[:80]))
+                return ""
+            time.sleep(3)
+    return ""
+
+
 def clean_text(s):
     s = re.sub(r"<br\s*/?>", "\n", s or "")
     s = re.sub(r"<[^>]+>", "", s)
@@ -154,9 +169,6 @@ def main():
             title = (s.get("title") or "").strip()
             if title and title not in text:
                 text = (title + "\n" + text) if text else title
-            # 有标题的长文/专栏帖：雪球把全文锁在 App，网页端所有途径
-            # （时间线 text、show.json、api 域名、详情页、微博同步）都只有导读 → 标记已截断
-            gated = bool(title) and not raw
             if s.get("retweeted_status"):
                 # 转发式回复（回复@xxx: ...）保留；无自己评论的纯转发才跳过
                 if re.sub(r"\s+", "", text) in ("", "转发微博", "Repost"):
@@ -165,6 +177,15 @@ def main():
             date = ts_date(s.get("created_at") or 0)
             if not sid or not text or not date:
                 continue
+            # 有标题的长文/专栏帖：时间线只有导读，调 api 域名 show.json 取全文；
+            # 取不到且仍明显短于雪球自报全文长度（original_text_length）才标「已截断」
+            gated = bool(title) and not raw
+            if gated:
+                full = fetch_full_text(sid)
+                if len(full) > len(text):
+                    text = full
+                otl = (s.get("extend_st_feed_info") or {}).get("original_text_length") or 0
+                gated = otl > len(text) + 20
             key = (date, norm(text))
             key30 = (date, norm(text)[:30])
             if sid in known_ids or key in known_keys or key30 in known_keys30:
@@ -177,6 +198,10 @@ def main():
                             repaired.append(sid)
                         if gated and not p.get("trunc"):
                             p["trunc"] = True
+                            if sid not in repaired:
+                                repaired.append(sid)
+                        elif not gated and p.get("trunc"):
+                            del p["trunc"]   # 全文已取到，撤掉误标的「已截断」
                             if sid not in repaired:
                                 repaired.append(sid)
                         break
