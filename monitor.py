@@ -129,6 +129,7 @@ def main():
     known_keys30 = {(p["date"], norm(p["text"])[:30]) for p in posts}
 
     new_posts = []
+    repaired = []          # 本轮补全正文的老帖 id
     hit_known = False
     pages_fetched = 0
     for page in range(1, MAX_PAGES + 1):
@@ -144,13 +145,19 @@ def main():
             print("第 %d 页为空，停止" % page)
             break
         for s in sts:
-            own = clean_text(s.get("description") or s.get("text") or "")
+            # 全文取值：text 是完整正文（含回复的引用链）；description 常被截到 ~150 字
+            text = clean_text(s.get("text") or "")
+            desc = clean_text(s.get("description") or "")
+            if not text or len(desc) > len(text):
+                text = desc
+            title = (s.get("title") or "").strip()
+            if title and title not in text:
+                text = (title + "\n" + text) if text else title
             if s.get("retweeted_status"):
                 # 转发式回复（回复@xxx: ...）保留；无自己评论的纯转发才跳过
-                if re.sub(r"\s+", "", own) in ("", "转发微博", "Repost"):
+                if re.sub(r"\s+", "", text) in ("", "转发微博", "Repost"):
                     continue
             sid = str(s.get("id") or "")
-            text = own
             date = ts_date(s.get("created_at") or 0)
             if not sid or not text or not date:
                 continue
@@ -158,6 +165,13 @@ def main():
             key30 = (date, norm(text)[:30])
             if sid in known_ids or key in known_keys or key30 in known_keys30:
                 hit_known = True
+                # 修复老帖：接口正文比库内长（历史截断）就更新
+                for p in posts:
+                    if str(p.get("id")) == sid:
+                        if len(text) > len(p["text"]):
+                            p["text"] = text
+                            repaired.append(sid)
+                        break
                 continue
             known_ids.add(sid)
             known_keys.add(key)
@@ -168,20 +182,27 @@ def main():
             break
         time.sleep(PAGE_DELAY)
 
-    if not new_posts:
+    if not new_posts and not repaired:
         print("抓取完成：翻 %d 页，新增雪球帖 0 条" % pages_fetched)
         print("无新帖，不推送。")
         return
 
-    merged = posts + new_posts
-    merged.sort(key=lambda p: p["date"], reverse=True)  # 稳定排序，同日保持原序
-    db["posts"] = merged
-    db["meta"]["count"] = len(merged)
-    db["meta"]["date_min"] = merged[-1]["date"]
-    db["meta"]["date_max"] = merged[0]["date"]
+    if new_posts:
+        merged = posts + new_posts
+        merged.sort(key=lambda p: p["date"], reverse=True)  # 稳定排序，同日保持原序
+        db["posts"] = merged
+        db["meta"]["count"] = len(merged)
+        db["meta"]["date_min"] = merged[-1]["date"]
+        db["meta"]["date_max"] = merged[0]["date"]
+    if repaired:
+        print("修复历史截断帖 %d 条" % len(repaired))
     db["meta"]["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
     with open(DATA, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, indent=1)
+
+    if not new_posts:
+        print("无新帖，不推送。")
+        return
 
     dates = sorted({p["date"] for p in new_posts})
     span = dates[0] if len(dates) == 1 else "%s ~ %s" % (dates[0], dates[-1])
