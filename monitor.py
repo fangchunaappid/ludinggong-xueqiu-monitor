@@ -146,13 +146,17 @@ def main():
             break
         for s in sts:
             # 全文取值：text 是完整正文（含回复的引用链）；description 常被截到 ~150 字
-            text = clean_text(s.get("text") or "")
+            raw = clean_text(s.get("text") or "")
             desc = clean_text(s.get("description") or "")
+            text = raw
             if not text or len(desc) > len(text):
                 text = desc
             title = (s.get("title") or "").strip()
             if title and title not in text:
                 text = (title + "\n" + text) if text else title
+            # 有标题的长文/专栏帖：雪球把全文锁在 App，网页端所有途径
+            # （时间线 text、show.json、api 域名、详情页、微博同步）都只有导读 → 标记已截断
+            gated = bool(title) and not raw
             if s.get("retweeted_status"):
                 # 转发式回复（回复@xxx: ...）保留；无自己评论的纯转发才跳过
                 if re.sub(r"\s+", "", text) in ("", "转发微博", "Repost"):
@@ -171,12 +175,19 @@ def main():
                         if len(text) > len(p["text"]):
                             p["text"] = text
                             repaired.append(sid)
+                        if gated and not p.get("trunc"):
+                            p["trunc"] = True
+                            if sid not in repaired:
+                                repaired.append(sid)
                         break
                 continue
             known_ids.add(sid)
             known_keys.add(key)
             known_keys30.add(key30)
-            new_posts.append({"id": sid, "date": date, "text": text})
+            np = {"id": sid, "date": date, "text": text}
+            if gated:
+                np["trunc"] = True
+            new_posts.append(np)
         if hit_known:
             print("第 %d 页撞上已知旧帖，停止" % page)
             break
