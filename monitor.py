@@ -184,6 +184,8 @@ def main():
                 full = fetch_full_text(sid)
                 if len(full) > len(text):
                     text = full
+                if title and title not in text:
+                    text = title + "\n" + text
                 otl = (s.get("extend_st_feed_info") or {}).get("original_text_length") or 0
                 gated = otl > len(text) + 20
             key = (date, norm(text))
