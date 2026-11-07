@@ -1,6 +1,6 @@
-# ludinggong-xueqiu-monitor — 超级鹿鼎公雪球帖增量监控
+# ludinggong-xueqiu-monitor — 老舅雪球帖增量监控
 
-只针对**雪球**，增量抓取「超级鹿鼎公」(UID `8790885129`) 的**原创帖**，
+只针对**雪球**，增量抓取「老舅」(UID `8790885129`) 的**原创帖**，
 追加进 `data/posts.json` 底库（新→旧），并在有新帖时向飞书推送一条**仅成功入库**的通知。
 
 - 主程序：[monitor.py](monitor.py)，依赖仅 [curl_cffi](requirements.txt)（模拟 Chrome TLS 指纹过雪球阿里云 WAF）
@@ -10,7 +10,7 @@
 - 接口：`https://www.xueqiu.com/v4/statuses/user_timeline.json`（旧接口已 404 下线；匿名可拉第 1 页，配 Cookie 可翻深页）
 - `XQ_COOKIE` **可选**：不配置则匿名抓第 1 页（日常增量足够）；配置后可翻更深页，用于长时间中断后的补抓
 - 飞书通知格式（不含正文、无新帖不推）：
-  > ✅ 已成功将 N 条超级鹿鼎公的雪球帖加入帖子库（posts.json）（日期区间）
+  > ✅ 已成功将 N 条老舅的雪球帖加入帖子库（posts.json）（日期区间）
   > ⚠️ 失败时推送告警（Cookie 过期 / 抓取异常）
 
 ## 数据格式（data/posts.json）
