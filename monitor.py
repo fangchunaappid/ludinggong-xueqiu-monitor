@@ -38,6 +38,14 @@ PAGE_DELAY = 1.5
 from curl_cffi import requests as _creq  # noqa: E402
 
 
+def sanitize_pii(text):
+    """入库前脱敏：身份证号、手机号、邮箱。"""
+    text = re.sub(r"(?<!\d)(\d{3})\d{11}(\d{3}[\dXx])(?!\d)", r"\1***********\2", text)
+    text = re.sub(r"(?<!\d)(1[3-9]\d)\d{4}(\d{4})(?!\d)", r"\1****\2", text)
+    text = re.sub(r"([A-Za-z0-9])[A-Za-z0-9._%+\-]*(@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})", r"\1***\2", text)
+    return text
+
+
 class ApiError(RuntimeError):
     pass
 
@@ -188,6 +196,7 @@ def main():
                     text = title + "\n" + text
                 otl = (s.get("extend_st_feed_info") or {}).get("original_text_length") or 0
                 gated = otl > len(text) + 20
+            text = sanitize_pii(text)
             key = (date, norm(text))
             key30 = (date, norm(text)[:30])
             if sid in known_ids or key in known_keys or key30 in known_keys30:
