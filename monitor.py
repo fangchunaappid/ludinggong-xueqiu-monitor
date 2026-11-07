@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ludinggong-xueqiu-monitor — 超级鹿鼎公雪球帖增量监控
+"""ludinggong-xueqiu-monitor — 老舅雪球帖增量监控
 
-  1. 抓取 xueqiu.com 用户时间线（UID 8790885129 = 超级鹿鼎公）；
+  1. 抓取 xueqiu.com 用户时间线（UID 8790885129 = 老舅）；
   2. 只收原创帖（转发跳过）；
   3. 增量去重：优先雪球 id，退化 (日期, 正文) 与 (日期, 正文前30字) 双键，历史绝不重复；
   4. 新帖追加进 data/posts.json（新→旧），有新帖推送飞书（仅成功入库通知，无新帖不推）。
@@ -160,7 +160,7 @@ def main():
             j = fetch_page(page)
         except Exception as e:
             print("第 %d 页抓取失败: %s" % (page, e))
-            feishu("⚠️ 超级鹿鼎公雪球监控失败：第 %d 页抓取异常 %s，请检查 XQ_COOKIE 是否过期" % (page, e))
+            feishu("⚠️ 老舅雪球监控失败：第 %d 页抓取异常 %s，请检查 XQ_COOKIE 是否过期" % (page, e))
             sys.exit(1)
         sts = j.get("statuses") or []
         pages_fetched += 1
@@ -255,10 +255,9 @@ def main():
     span = dates[0] if len(dates) == 1 else "%s ~ %s" % (dates[0], dates[-1])
     print("抓取完成：翻 %d 页，新增雪球帖 %d 条（%s），共 %d 条"
           % (pages_fetched, len(new_posts), span, len(merged)))
-    feishu("✅ 已成功将 %d 条超级鹿鼎公的雪球帖加入帖子库（posts.json）（%s）"
+    feishu("✅ 已成功将 %d 条老舅的雪球帖加入帖子库（posts.json）（%s）"
            % (len(new_posts), span))
 
 
 if __name__ == "__main__":
     main()
-
