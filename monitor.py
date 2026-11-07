@@ -46,14 +46,6 @@ def sanitize_pii(text):
     return text
 
 
-def rename_display(text):
-    """显示名统一：把「鹿鼎公」相关称谓换成「老舅」（拼音 ludinggong / UID 不变）。"""
-    return (text
-            .replace("挖地瓜的超级鹿鼎公", "老舅")
-            .replace("超级鹿鼎公", "老舅")
-            .replace("鹿鼎公", "老舅"))
-
-
 class ApiError(RuntimeError):
     pass
 
@@ -155,8 +147,6 @@ def main():
     with open(DATA, encoding="utf-8") as f:
         db = json.load(f)
     posts = db["posts"]
-    for p in posts:
-        p["text"] = rename_display(p.get("text") or "")
     known_ids = {str(p.get("id")) for p in posts if p.get("id")}
     known_keys = {(p["date"], norm(p["text"])) for p in posts}
     known_keys30 = {(p["date"], norm(p["text"])[:30]) for p in posts}
@@ -207,7 +197,6 @@ def main():
                 otl = (s.get("extend_st_feed_info") or {}).get("original_text_length") or 0
                 gated = otl > len(text) + 20
             text = sanitize_pii(text)
-            text = rename_display(text)
             key = (date, norm(text))
             key30 = (date, norm(text)[:30])
             if sid in known_ids or key in known_keys or key30 in known_keys30:
